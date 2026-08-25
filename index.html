@@ -837,8 +837,8 @@ async function startScanning() {
       dbg.innerHTML = `Browser: ${navigator.userAgent.substring(0,60)}<br>iOS=${isIOS}, BD=${hasBarcodeDetector}<br>HTTPS=${location.protocol === 'https:'}<br>mediaDevices=${!!navigator.mediaDevices}<br>`;
     }
 
-    // Use native BarcodeDetector only on non-iOS browsers that support it
-    if (hasBarcodeDetector && !isIOS) {
+    // Use native BarcodeDetector when available (iOS 18.4+, Chrome, Edge)
+    if (hasBarcodeDetector) {
       if (dbg) dbg.innerHTML += '→ Using native BarcodeDetector<br>';
       await startNativeScanner();
       return;
