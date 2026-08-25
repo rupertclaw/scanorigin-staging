@@ -949,60 +949,49 @@ async function startHtml5Scanner() {
   document.querySelector('.scan-overlay').style.display = 'none';
 
   // Create a clean dedicated container for html5-qrcode
-  // The existing scannerWrap has overflow:hidden + max-height that clips the video
   const wrap = document.getElementById('scannerWrap');
   const h5container = document.createElement('div');
   h5container.id = 'html5qr-container';
-  h5container.style.cssText = 'width:100%; aspect-ratio:4/3; max-height:340px; background:#000; position:relative; overflow:hidden;';
+  h5container.style.cssText = 'width:100%; aspect-ratio:1.333; max-height:380px; background:#000; position:relative;';
   wrap.appendChild(h5container);
 
   if (dbg) dbg.innerHTML += '→ Creating Html5Qrcode instance<br>';
   html5Qr = new Html5Qrcode('html5qr-container', {
     experimentalFeatures: { useBarCodeDetectorIfSupported: false },
-    verbose: false,
+    verbose: true,
   });
 
-  // Responsive qrbox — scales to viewport, wider for EAN barcodes
-  function makeQrbox(width, height) {
-    const minDim = Math.min(width, height);
-    const boxW = Math.floor(minDim * 0.8);
-    const boxH = Math.floor(boxW * 0.5); // wider than tall for EAN barcodes
-    return { width: boxW, height: boxH };
-  }
-
+  // Fixed qrbox — small enough to fit any phone screen, wide for EAN barcodes
+  // EAN-13 barcodes are ~1.5cm tall x 3.7cm wide, so wide+short scan box
   const config = {
-    fps: 15,
-    qrbox: makeQrbox,
+    fps: 10,
+    qrbox: { width: 200, height: 100 },
     aspectRatio: 1.333,
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
       Html5QrcodeSupportedFormats.EAN_8,
       Html5QrcodeSupportedFormats.UPC_A,
       Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128,
-      Html5QrcodeSupportedFormats.CODE_39,
     ],
   };
 
-  // Require multiple consecutive reads to prevent false positives
   let lastRead = null;
   let readCount = 0;
   const REQUIRED = 2;
 
   if (dbg) dbg.innerHTML += '→ Calling html5Qr.start()<br>';
 
-  // Request higher resolution on iOS for better decoding
+  // Lower resolution — iOS Safari handles 640x480 more reliably for barcode scanning
   const videoConstraints = {
     facingMode: 'environment',
-    width: { ideal: 1280 },
-    height: { ideal: 720 },
+    width: { ideal: 640 },
+    height: { ideal: 480 },
   };
 
   await html5Qr.start(
     videoConstraints,
     config,
     (decodedText) => {
-      // Validate: digits only, reasonable length
       if (!/^\d{8,14}$/.test(decodedText)) {
         lastRead = null;
         readCount = 0;
@@ -1020,9 +1009,16 @@ async function startHtml5Scanner() {
         processBarcode(decodedText);
       }
     },
-    (err) => { /* per-frame failure, ignore */ }
+    (err) => {
+      // Log first few per-frame errors to debug panel
+      if (dbg && !dbg.dataset.errLogged) {
+        dbg.innerHTML += `→ Frame err: ${String(err).substring(0, 80)}<br>`;
+        dbg.dataset.errLogged = '1';
+      }
+    }
   );
   scanning = true;
+  if (dbg) dbg.innerHTML += '→ html5-qrcode started OK<br>';
 }
 
 function stopScanning() {
