@@ -968,15 +968,15 @@ async function startHtml5Scanner() {
 
   if (dbg) dbg.innerHTML += '→ Creating Html5Qrcode instance<br>';
   html5Qr = new Html5Qrcode('html5qr-container', {
-    experimentalFeatures: { useBarCodeDetectorIfSupported: false },
+    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
     verbose: true,
   });
 
   // Fixed qrbox — small enough to fit any phone screen, wide for EAN barcodes
   // EAN-13 barcodes are ~1.5cm tall x 3.7cm wide, so wide+short scan box
   const config = {
-    fps: 10,
-    qrbox: { width: 200, height: 100 },
+    fps: 15,
+    qrbox: { width: 250, height: 120 },
     aspectRatio: 1.333,
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
