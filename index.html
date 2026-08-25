@@ -818,9 +818,7 @@ async function startScanning() {
   // Detect in-app browsers (Facebook, Instagram, LinkedIn, etc.) — they block camera access
   const inAppBrowser = /FBAN|FBAV|Instagram|LinkedInApp|Snapchat|Twitter|TikTok/i.test(navigator.userAgent);
   if (inAppBrowser) {
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const browserName = isIOS ? 'Safari' : 'Chrome';
-    showError('This browser blocks camera access. Tap the menu icon (⋮) at the top right and choose "Open in ' + browserName + '" to scan barcodes.');
+    showError('This browser blocks camera access. Tap the menu icon (⋮) at the top right and choose "Open in external browser" to scan barcodes.');
     return;
   }
 
