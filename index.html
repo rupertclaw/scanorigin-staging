@@ -943,22 +943,36 @@ async function startNativeScanner() {
 // html5-qrcode fallback (Safari iOS, Firefox, older browsers)
 async function startHtml5Scanner() {
   const dbg = document.getElementById('iosDebug');
-  // html5-qrcode needs its own container, so we use it differently
-  // We'll hide the video element and let html5-qrcode create its own
-  document.getElementById('video').style.display = 'none';
 
-  // Hide overlay while html5-qrcode runs (it has its own UI)
+  // Hide native scanner elements
+  document.getElementById('video').style.display = 'none';
   document.querySelector('.scan-overlay').style.display = 'none';
 
+  // Create a clean dedicated container for html5-qrcode
+  // The existing scannerWrap has overflow:hidden + max-height that clips the video
+  const wrap = document.getElementById('scannerWrap');
+  const h5container = document.createElement('div');
+  h5container.id = 'html5qr-container';
+  h5container.style.cssText = 'width:100%; aspect-ratio:4/3; max-height:340px; background:#000; position:relative; overflow:hidden;';
+  wrap.appendChild(h5container);
+
   if (dbg) dbg.innerHTML += '→ Creating Html5Qrcode instance<br>';
-  html5Qr = new Html5Qrcode('scannerWrap', {
+  html5Qr = new Html5Qrcode('html5qr-container', {
     experimentalFeatures: { useBarCodeDetectorIfSupported: false },
     verbose: false,
   });
 
+  // Responsive qrbox — scales to viewport, wider for EAN barcodes
+  function makeQrbox(width, height) {
+    const minDim = Math.min(width, height);
+    const boxW = Math.floor(minDim * 0.8);
+    const boxH = Math.floor(boxW * 0.5); // wider than tall for EAN barcodes
+    return { width: boxW, height: boxH };
+  }
+
   const config = {
-    fps: 10,
-    qrbox: { width: 250, height: 180 },
+    fps: 15,
+    qrbox: makeQrbox,
     aspectRatio: 1.333,
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
@@ -973,11 +987,19 @@ async function startHtml5Scanner() {
   // Require multiple consecutive reads to prevent false positives
   let lastRead = null;
   let readCount = 0;
-  const REQUIRED = 3;
+  const REQUIRED = 2;
 
   if (dbg) dbg.innerHTML += '→ Calling html5Qr.start()<br>';
+
+  // Request higher resolution on iOS for better decoding
+  const videoConstraints = {
+    facingMode: 'environment',
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
+  };
+
   await html5Qr.start(
-    { facingMode: 'environment' },
+    videoConstraints,
     config,
     (decodedText) => {
       // Validate: digits only, reasonable length
@@ -986,6 +1008,7 @@ async function startHtml5Scanner() {
         readCount = 0;
         return;
       }
+      if (dbg) dbg.innerHTML += `→ Read: ${decodedText} (count ${readCount + 1})<br>`;
       if (decodedText === lastRead) {
         readCount++;
       } else {
@@ -1019,10 +1042,14 @@ function stopScanning() {
       html5Qr = null;
       document.getElementById('video').style.display = 'block';
       document.querySelector('.scan-overlay').style.display = 'block';
+      const hc = document.getElementById('html5qr-container');
+      if (hc) hc.remove();
     }).catch(() => {
       html5Qr = null;
       document.getElementById('video').style.display = 'block';
       document.querySelector('.scan-overlay').style.display = 'block';
+      const hc = document.getElementById('html5qr-container');
+      if (hc) hc.remove();
     });
   }
 
