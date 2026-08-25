@@ -814,6 +814,14 @@ let scanning = false;
 
 async function startScanning() {
   if (scanning) return;
+
+  // Detect in-app browsers (Facebook, Instagram, LinkedIn, etc.) — they block camera access
+  const inAppBrowser = /FBAN|FBAV|Instagram|LinkedInApp|Snapchat|Twitter|TikTok/i.test(navigator.userAgent);
+  if (inAppBrowser) {
+    showError('This browser blocks camera access. Tap the menu icon (⋮) at the top right and choose "Open in Safari" or "Open in browser" to scan barcodes.');
+    return;
+  }
+
   try {
     document.getElementById('startBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'flex';
@@ -945,9 +953,11 @@ async function startNativeScanner() {
 async function startHtml5Scanner() {
   const dbg = document.getElementById('iosDebug');
 
-  // Hide native scanner elements
-  document.getElementById('video').style.display = 'none';
-  document.querySelector('.scan-overlay').style.display = 'none';
+  // Hide native scanner elements (null-safe)
+  const vid = document.getElementById('video');
+  if (vid) vid.style.display = 'none';
+  const overlay = document.querySelector('.scan-overlay');
+  if (overlay) overlay.style.display = 'none';
 
   // Create a clean dedicated container for html5-qrcode
   const wrap = document.getElementById('scannerWrap');
@@ -1022,7 +1032,7 @@ function stopScanning() {
 
   // Stop native
   const video = document.getElementById('video');
-  if (video.srcObject) {
+  if (video && video.srcObject) {
     video.srcObject.getTracks().forEach(t => t.stop());
     video.srcObject = null;
   }
@@ -1032,14 +1042,18 @@ function stopScanning() {
     html5Qr.stop().then(() => {
       html5Qr.clear();
       html5Qr = null;
-      document.getElementById('video').style.display = 'block';
-      document.querySelector('.scan-overlay').style.display = 'block';
+      const vid = document.getElementById('video');
+      if (vid) vid.style.display = 'block';
+      const overlay = document.querySelector('.scan-overlay');
+      if (overlay) overlay.style.display = 'block';
       const hc = document.getElementById('html5qr-container');
       if (hc) hc.remove();
     }).catch(() => {
       html5Qr = null;
-      document.getElementById('video').style.display = 'block';
-      document.querySelector('.scan-overlay').style.display = 'block';
+      const vid = document.getElementById('video');
+      if (vid) vid.style.display = 'block';
+      const overlay = document.querySelector('.scan-overlay');
+      if (overlay) overlay.style.display = 'block';
       const hc = document.getElementById('html5qr-container');
       if (hc) hc.remove();
     });
