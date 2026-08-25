@@ -844,7 +844,8 @@ async function startScanning() {
   } catch (err) {
     console.error('Scanner start error:', err);
     const dbg = document.getElementById('iosDebug');
-    if (dbg) dbg.innerHTML += `→ ERROR: ${err.name}: ${err.message}<br>`;
+    if (dbg) dbg.innerHTML += `→ ERROR: ${err.name || 'unknown'}: ${err.message || 'no message'}<br>`;
+    if (dbg && err.stack) dbg.innerHTML += `→ Stack: ${String(err.stack).substring(0, 120)}<br>`;
     let msg = 'Could not access camera. Make sure you are on HTTPS and have granted camera permissions.';
     if (err.name === 'NotAllowedError') {
       msg = 'Camera access denied. Go to Settings → Safari → Camera and allow access for this website.';
@@ -981,12 +982,8 @@ async function startHtml5Scanner() {
 
   if (dbg) dbg.innerHTML += '→ Calling html5Qr.start()<br>';
 
-  // Lower resolution — iOS Safari handles 640x480 more reliably for barcode scanning
-  const videoConstraints = {
-    facingMode: 'environment',
-    width: { ideal: 640 },
-    height: { ideal: 480 },
-  };
+  // Minimal constraints — iOS Safari chokes on explicit resolution requests
+  const videoConstraints = { facingMode: 'environment' };
 
   await html5Qr.start(
     videoConstraints,
@@ -1010,7 +1007,6 @@ async function startHtml5Scanner() {
       }
     },
     (err) => {
-      // Log first few per-frame errors to debug panel
       if (dbg && !dbg.dataset.errLogged) {
         dbg.innerHTML += `→ Frame err: ${String(err).substring(0, 80)}<br>`;
         dbg.dataset.errLogged = '1';
