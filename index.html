@@ -811,6 +811,7 @@ function showError(msg) {
 let html5Qr = null;
 let currentCamera = 'environment';
 let scanning = false;
+let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 async function startScanning() {
   if (scanning) return;
@@ -826,8 +827,7 @@ async function startScanning() {
     document.getElementById('startBtn').style.display = 'none';
     document.getElementById('stopBtn').style.display = 'flex';
 
-    // Detect iOS Safari (which has unreliable BarcodeDetector support)
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // Detect iOS Safari (isIOS declared at module scope)
     const hasBarcodeDetector = 'BarcodeDetector' in window;
 
     // Debug panel for iOS diagnostics
@@ -968,16 +968,26 @@ async function startHtml5Scanner() {
 
   if (dbg) dbg.innerHTML += '→ Creating Html5Qrcode instance<br>';
   html5Qr = new Html5Qrcode('html5qr-container', {
-    experimentalFeatures: { useBarCodeDetectorIfSupported: true },
-    verbose: true,
+    experimentalFeatures: { useBarCodeDetectorIfSupported: false },
+    verbose: false,
   });
 
-  // Fixed qrbox — small enough to fit any phone screen, wide for EAN barcodes
-  // EAN-13 barcodes are ~1.5cm tall x 3.7cm wide, so wide+short scan box
+  // iOS Safari fix: NO aspectRatio in config (breaks decoding on iOS)
+  // Use videoConstraints inside config (2nd arg) for higher resolution
+  // qrbox as a function so it adapts to actual video dimensions
   const config = {
-    fps: 15,
-    qrbox: { width: 250, height: 120 },
-    aspectRatio: 1.333,
+    fps: 10,
+    qrbox: function(viewWidth, viewHeight) {
+      // Wide + short box for EAN/UPC barcodes, but never larger than the view
+      const w = Math.min(250, Math.floor(viewWidth * 0.85));
+      const h = Math.min(120, Math.floor(viewHeight * 0.55));
+      return { width: w, height: h };
+    },
+    videoConstraints: {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      facingMode: { ideal: 'environment' },
+    },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13,
       Html5QrcodeSupportedFormats.EAN_8,
@@ -992,11 +1002,8 @@ async function startHtml5Scanner() {
 
   if (dbg) dbg.innerHTML += '→ Calling html5Qr.start()<br>';
 
-  // Minimal constraints — iOS Safari chokes on explicit resolution requests
-  const videoConstraints = { facingMode: 'environment' };
-
   await html5Qr.start(
-    videoConstraints,
+    {},  // empty first arg — videoConstraints are in config
     config,
     (decodedText) => {
       if (!/^\d{8,14}$/.test(decodedText)) {
@@ -1017,14 +1024,51 @@ async function startHtml5Scanner() {
       }
     },
     (err) => {
-      if (dbg && !dbg.dataset.errLogged) {
-        dbg.innerHTML += `→ Frame err: ${String(err).substring(0, 80)}<br>`;
-        dbg.dataset.errLogged = '1';
+      // Log frame errors but don't suppress — helps debug iOS decode failures
+      if (dbg) {
+        const errLine = `→ Frame err: ${String(err).substring(0, 80)}<br>`;
+        if (dbg.dataset.errCount) {
+          dbg.dataset.errCount = String(parseInt(dbg.dataset.errCount) + 1);
+        } else {
+          dbg.dataset.errCount = '1';
+          dbg.innerHTML += errLine;
+        }
+        // Show error count every 50 errors
+        if (parseInt(dbg.dataset.errCount) % 50 === 0) {
+          dbg.innerHTML += `→ ${dbg.dataset.errCount} frame errors so far<br>`;
+        }
       }
     }
   );
   scanning = true;
   if (dbg) dbg.innerHTML += '→ html5-qrcode started OK<br>';
+
+  // iOS focus fix: apply continuous focus + zoom AFTER camera starts
+  // Without this, iPhone camera stays unfocused → blurry → ZXing can't decode
+  if (isIOS) {
+    if (dbg) dbg.innerHTML += '→ Applying iOS focus constraints<br>';
+    setTimeout(async () => {
+      try {
+        const caps = html5Qr.getRunningTrackCapabilities();
+        if (dbg) dbg.innerHTML += `→ Track caps: zoom=${caps.zoom || 'none'}, focus=${caps.focusMode || 'none'}<br>`;
+        const constraints = {};
+        if (caps.focusMode) constraints.focusMode = 'continuous';
+        if (caps.zoom && caps.zoom > 1) constraints.advanced = [{ zoom: 2.0 }];
+        if (caps.focusDistance) {
+          constraints.advanced = constraints.advanced || [];
+          constraints.advanced.push({ focusDistance: 1 });
+        }
+        if (Object.keys(constraints).length > 0) {
+          await html5Qr.applyVideoConstraints(constraints);
+          if (dbg) dbg.innerHTML += '→ Focus constraints applied<br>';
+        } else {
+          if (dbg) dbg.innerHTML += '→ No focus/zoom caps available<br>';
+        }
+      } catch (e) {
+        if (dbg) dbg.innerHTML += `→ Focus apply failed: ${String(e).substring(0, 60)}<br>`;
+      }
+    }, 2000);
+  }
 }
 
 function stopScanning() {
